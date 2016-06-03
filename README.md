@@ -7,4 +7,8 @@ This is the repo for the Capstone project for Coursera Data Science.
 * Files for the app are in 'shiny' directory
 * Files for the final (R Presentation) file are in 'presentation'
 * 
-the actual app is available on https://emiels.shinyapps.io/wordprediction/
+
+Actuals are available on:
+* App https://emiels.shinyapps.io/wordprediction/
+* Final report http://rpubs.com/emiels/DSCap
+* Midterm report http://rpubs.com/emiels/DSP01
