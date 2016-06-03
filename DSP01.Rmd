@@ -1,0 +1,172 @@
+---
+title: "Text Prediction with R"
+subtitle: "Milestone Report"
+author: "Emiel Schoenmakers"
+date: "April 30th, 2016"
+output: html_document
+---
+
+### Summary
+This is the submission for week two of the Data Science Capstone project. This paper explains the loading and preparation of the data set, the exploratory analysis and the approach for the subsequent application design.
+
+### Basic properties of the data files
+The data is originally from [corpora](http://www.corpora.heliohost.org/index.html) but for this assignment downloaded from Coursera. It consists of three files per language, one containing tweets, one blogs and the last one news. For this assignment I've used the English (en_US) version.
+
+Using *wc* from the RTools package I've gathered basic properties outside of R-studio.
+
+|Source  |  Characters | Words      | Lines     | Avg Words/Line | Avg Char/word
+|------- |-------------|------------|-----------|----------------|--------------
+|Twitter | 162,385,000 | 31,062,000 | 2,360,000 | `r round(31062/2360,2)`| `r round(162385/31062,2)`
+|Blogs   | 206,824,000 | 38,051,000 |   899,000 | `r round(38051/899,2)`| `r round(206824/38051,2)`
+|News    | 203,223,000 | 34,310,000 | 1,010,000 | `r round(34310/1010,2)`| `r round(203223/34310,2)`
+
+The average length of tweets (lines) is about a third of the blog and news lines. My guess is this is related to the limited number of characters (140). 
+For the rest of this paper I show the approach for **blog** data; for news and twitter data the approach is similar.
+
+### Loading the data
+The provided files are fairly large data sets (especially for the limited computer resources I have :), so I decided to load a 1% random sample for exploratory purposes. 
+
+Note on the code: the code used to create this document was mostly hidden.
+At the bottom of this document is a link to the entire file including the code used.
+
+```{r 'Setup', include=FALSE}
+# defaults settings for a chunk
+knitr::opts_chunk$set(warning = FALSE, 
+                      message = FALSE, 
+                      echo = FALSE)
+# initialize libraries and define functions
+library(tm); library(RWeka); require(SnowballC); require(slam); require(wordcloud)
+readSample <- function(filename, nrLines = -1,size = 0.001){
+        con <- file(paste("Coursera-SwiftKey/final/en_US/en_US",filename,"txt",sep="."))
+        readTxt <- readLines(con,nrLines)            
+        close(con)
+        set.seed(5251)
+        readSample <- sample(readTxt, 
+                               size = round(length(readTxt)*size),
+                               replace = FALSE)
+        rm(readTxt)
+        readSample
+}
+BigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 2, max = 2))
+TrigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 3, max = 3))
+FourgramTokenizer <- function(x) NGramTokenizer(x, Weka_control(min = 4, max = 4))
+createCorpus <- function(readText){ # all standard corpus operations combines
+        crp <- Corpus(VectorSource(readText))
+        crp <- tm_map(crp, content_transformer(tolower))
+        crp <- tm_map(crp, removeNumbers)
+        crp <- tm_map(crp, removePunctuation)
+        crp <- tm_map(crp, stemDocument)
+        crp <- tm_map(crp, stripWhitespace)
+}
+TokenizeTDM <- function(sample, tokenSize = 2) {
+        #Tokenize Corpus to required tokensize
+        switch(tokenSize,
+               {
+                       TokenizeTDM <-
+                               TermDocumentMatrix(sample,
+                                                  control =
+                                                          list(stopwords = TRUE,
+                                                               bounds =
+                                                                       list(global = c(
+                                                                               lowerbound, Inf
+                                                                       ))))
+               },
+               {
+                       TokenizeTDM <-
+                               TermDocumentMatrix(
+                                       sample,
+                                       control = list(
+                                               tokenize = BigramTokenizer,
+                                               BigramTokenizer,
+                                               stopwords = TRUE,
+                                               bounds = list(global = c(lowerbound, Inf))
+                                       )
+                               )
+               },
+               {
+                       TokenizeTDM <- TermDocumentMatrix(
+                               sample,
+                                                         control = list(
+                                                                 tokenize = TrigramTokenizer,
+                                                                 stopwords = TRUE,
+                                                                 bounds = list(global = c(lowerbound, Inf))
+                                                         ))
+               },
+               {
+                       TokenizeTDM <- TermDocumentMatrix(
+                               sample,
+                               control = list(
+                                       tokenize = FourgramTokenizer,
+                                       stopwords = TRUE,
+                                       bounds = list(global = c(lowerbound, Inf))
+                               )
+                       )
+               },
+               break)
+                TokenizeTDM
+}
+``` 
+```{r 'load data', echo = TRUE}
+#load the data
+nrLines <- -1
+samplesize <- 0.01 # fraction to take into sample, now 1%
+lowerbound <- 5 # terms to occur in minimal 5 documents (blogs, tweets of news posts)
+readBlogs <- readSample("blogs", nrLines = nrLines, size = samplesize)
+```
+
+### Preprocess the data
+I now have a sample set of about 1% of the original data for further exploration. For text analysis the data needs to be transformed.
+First I need to create a Corpus (one big container containing all separate news items). Then I can look at the properties of the container (Corpus).
+For the text analysis I am interested in the frequency of individual words, of duos of words (called bi-gram) and of trios of words tri-grams).
+``` {r 'preproces', echo = TRUE}
+crpBlogs <- createCorpus(readBlogs)
+OneBlog <- TokenizeTDM(crpBlogs, tokenSize = 1)
+TwoBlog <- TokenizeTDM(crpBlogs, tokenSize = 2)
+ThreeBlog <- TokenizeTDM(crpBlogs, tokenSize = 3)
+rm(crpBlogs)
+```
+
+### Exploring the data
+For the data set I have three sets: words, bi-grams and tri-grams.
+Now I am interested in the frequencies of the most popular terms. I look at the histogram for the bi-gram and at barcharts for the top10 (words, bi- and tri-gram). 
+
+#### Histogram and barcharts for word/bigram/trigram
+
+``` {r 'frequency', echo = TRUE}
+frqBlogThree <- sort(row_sums(ThreeBlog), decreasing = TRUE)
+frqBlogTwo <- sort(row_sums(TwoBlog), decreasing = TRUE)
+frqBlogOne <- sort(row_sums(OneBlog), decreasing = TRUE)
+hist(frqBlogTwo[1:1000], breaks=50, main = "Histogram of first 1000 bi-grams", col = "blue")
+```
+
+The histogram shows a long tail, the first 40 terms have a relative high frequency, but amount to only about 12% of the total bi-grams. A high number of terms occur with a low frequency. (plot limited to the first 1000 terms)
+
+```{r 'barplots', echo = TRUE}
+par( mar=c(5,8,2,2))
+barplot(frqBlogOne[1:10], horiz = TRUE, col = "green", main = "frequency unigram Top10 Blogs", las = 2)
+barplot(frqBlogTwo[1:10], horiz = TRUE, col = "blue", main = "frequency bigram Top10 Blogs", las = 2)
+barplot(frqBlogThree[1:10], horiz = TRUE, col = "red", main = "frequency trigram Top10 Blogs",las = 2)
+```
+
+Interesting to see that non of the Top10 unigram (words), make it into the Top10 of bi- or tri-grams. Also note the number of occurences reduces with the lengh of n-grams.
+
+#### Word cloud (bi-gram)
+Take a look at the top100 of bi-grams
+``` {r 'word cloud', echo = TRUE}
+wordcloud(names(frqBlogTwo[1:100]), frqBlogTwo, colors = brewer.pal(8,"Dark2"))
+```
+
+### Interesting stuff
+* The provided files are relatively large, subsequent processing and tokenization takes longer and longer. For prediction either a smaller Corpus is needed, or the intensive calculations need to be done before actual use (non-real time)
+* blogs and news contain fairly similar data, twitter data has different characteristics. This might correspond with the 140 character limit of twitter. since the objective of this assignment is prediction of next words in a sentence I think I will use the blog and news data mainly.
+* In sentence prediction some stop words (e.g. 'I' and 'you') are used. Check the effect of removal of stop words on the final model.
+
+### Plans and next steps
+* create training, test and validation sets taking required memory and calculation time in account
+* look at bi-, tri- and 4-grams (and maybe 5-grams)
+* create a (hash/) table for the most frequent x-grams
+* create algorithm including smoothing and back-off
+* optimize for performance given the shiny-app limitations
+
+#### Appendix - link to complete code (Rmd)-file
+[DSP01.Rmd](https://github.com/emiels/DSP/blob/gh-pages/DSP01.Rmd)

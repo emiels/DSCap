@@ -1,0 +1,6 @@
+---
+title: "Data Science Capstone - Project"
+author: "Emiel Schoenmakers"
+date: "April 30th 2016"
+output: html_document
+---

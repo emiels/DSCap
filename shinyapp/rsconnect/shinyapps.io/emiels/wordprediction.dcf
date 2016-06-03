@@ -1,0 +1,9 @@
+name: wordprediction
+account: emiels
+server: shinyapps.io
+appId: 105911
+bundleId: 468738
+url: https://emiels.shinyapps.io/wordprediction/
+when: 1464808976.02624
+asMultiple: FALSE
+asStatic: FALSE
